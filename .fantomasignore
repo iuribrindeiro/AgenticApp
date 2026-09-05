@@ -1,0 +1,4 @@
+# Fantomas 7.0.6 cannot format interfaces with static abstract members (IWSAM):
+# it reports "Formatting leads to invalid F# code" and refuses. Excluded until
+# upstream supports them; keep this file hand-formatted.
+src/Domain/ValueObject.fs

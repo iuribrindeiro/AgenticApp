@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <Nullable>enable</Nullable>
+    <!-- An unhandled DU case must fail the build, not warn. See the add-domain-model skill. -->
+    <NoWarn>$(NoWarn);FS3535</NoWarn>
+    <WarningsAsErrors>$(WarningsAsErrors);FS0025;FS1182;FS3261;FS3264;FS3265</WarningsAsErrors>
+    <!-- FS1182 (unused values/parameters) is opt-in; turn it on, then treat it as an error. -->
+    <OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Include="ValueObject.fs" />
+    <Compile Include="Primitives.fs" />
+    <Compile Include="Validation.fs" />
+    <Compile Include="Ids.fs" />
+    <Compile Include="Store.fs" />
+  </ItemGroup>
+
+</Project>

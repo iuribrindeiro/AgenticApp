@@ -1,0 +1,20 @@
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "fslangmcp": {
+      "version": "0.17.0",
+      "commands": [
+        "fslangmcp"
+      ],
+      "rollForward": false
+    },
+    "fantomas": {
+      "version": "7.0.6",
+      "commands": [
+        "fantomas"
+      ],
+      "rollForward": false
+    }
+  }
+}

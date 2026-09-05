@@ -1,0 +1,105 @@
+<Project>
+
+  <!--
+    Makes the repo work on a fresh clone: `dotnet restore` (or any build) installs the
+    pinned local tools and bootstraps FsLangMCP's F# compiler services, so the `fsharp`
+    MCP server in .mcp.json connects without a manual setup step.
+
+    FsLangMCP's bootstrap installs fsautocomplete, ProjInfo and Fantomas as *global*
+    tools, so the local manifest alone is not enough. Without it the MCP server exits
+    with "An error occurred trying to start process 'fsautocomplete'".
+
+    Guarded by a sentinel so it runs once per clone rather than on every build, and
+    ContinueOnError so a developer who is offline still gets a working build.
+    Set FsLangMcpBootstrap=false to skip it (CI, for example).
+  -->
+  <PropertyGroup>
+    <FsLangMcpBootstrapArgs>&#45;&#45;bootstrap-tools</FsLangMcpBootstrapArgs>
+    <FsLangMcpSentinel>$(MSBuildThisFileDirectory).config/.fslangmcp-bootstrapped</FsLangMcpSentinel>
+  </PropertyGroup>
+
+  <Target Name="BootstrapFsLangMcp"
+          AfterTargets="Restore"
+          Condition="!Exists('$(FsLangMcpSentinel)') And '$(FsLangMcpBootstrap)' != 'false'">
+    <Message Importance="high" Text="Bootstrapping F# language tooling for the fsharp MCP server (once per clone)..." />
+    <Exec Command="dotnet tool restore"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          StandardOutputImportance="low" />
+    <Exec Command="dotnet fslangmcp $(FsLangMcpBootstrapArgs)"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          IgnoreExitCode="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="FsLangMcpExit" />
+    </Exec>
+    <Touch Files="$(FsLangMcpSentinel)" AlwaysCreate="true" Condition="'$(FsLangMcpExit)' == '0'" />
+    <Message Importance="high"
+             Condition="'$(FsLangMcpExit)' != '0'"
+             Text="FsLangMCP bootstrap did not complete. Run it manually: dotnet fslangmcp $(FsLangMcpBootstrapArgs)" />
+  </Target>
+
+  <!--
+    Vendors, builds and starts the FSI MCP server (jovaneyck/fsi-mcp-server), which has
+    no NuGet package and only an HTTP/SSE transport - so it must be running for the
+    `fsi` entry in .mcp.json to connect. The script is idempotent and exits immediately
+    when the server is already healthy, so this costs one curl per build.
+    Set FsiMcpSetup=false to skip it.
+  -->
+  <Target Name="SetupFsiMcp"
+          AfterTargets="Restore"
+          Condition="'$(FsiMcpSetup)' != 'false' And '$(OS)' != 'Windows_NT'">
+    <Exec Command="bash &quot;$(MSBuildThisFileDirectory)tools/setup-fsi-mcp.sh&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          StandardOutputImportance="high" />
+  </Target>
+
+  <!--
+    Formatting is a build concern, not an editor or agent one: a hook only fires for
+    whoever has it installed, while this covers every developer, every editor and CI.
+    Drift fails the build the same way a warning does.
+
+    Run `dotnet fantomas src tools` (F#) or `dotnet format` (C#) to fix.
+    Set VerifyFormat=false to skip, e.g. for a work-in-progress build.
+  -->
+  <Target Name="VerifyFSharpFormat"
+          AfterTargets="Build"
+          Inputs="@(Compile)"
+          Outputs="$(IntermediateOutputPath)fantomas.stamp"
+          Condition="'$(VerifyFormat)' != 'false' And '@(Compile)' != '' And '$(MSBuildProjectExtension)' == '.fsproj'">
+    <!-- @(Compile) includes generated sources under obj/ (AssemblyInfo.fs and friends);
+         those are not ours to format and make Fantomas fail outright. -->
+    <ItemGroup>
+      <FormatCheckFile Include="@(Compile)" Condition="!$([System.String]::Copy('%(FullPath)').Contains('$([System.IO.Path]::DirectorySeparatorChar)obj$([System.IO.Path]::DirectorySeparatorChar)'))" />
+    </ItemGroup>
+
+    <Exec Command="dotnet fantomas --check @(FormatCheckFile->'&quot;%(FullPath)&quot;', ' ')"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="FantomasExit" />
+    </Exec>
+    <!-- Fantomas 7.0.6 exits 99 for drift despite its help text claiming 1, so treat any
+         non-zero as failure: a file it could not process is unverified, not verified. -->
+    <Error Condition="'$(FantomasExit)' != '0'"
+           Text="F# formatting drift in $(MSBuildProjectName). Run: dotnet fantomas src tools" />
+    <Touch Files="$(IntermediateOutputPath)fantomas.stamp" AlwaysCreate="true" />
+  </Target>
+
+  <Target Name="VerifyCSharpFormat"
+          AfterTargets="Build"
+          Inputs="@(Compile)"
+          Outputs="$(IntermediateOutputPath)format.stamp"
+          Condition="'$(VerifyFormat)' != 'false' And '$(MSBuildProjectExtension)' == '.csproj'">
+    <Exec Command="dotnet format &quot;$(MSBuildProjectFullPath)&quot; --verify-no-changes --no-restore"
+          ContinueOnError="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="DotnetFormatExit" />
+    </Exec>
+    <Error Condition="'$(DotnetFormatExit)' != '0'"
+           Text="C# formatting drift in $(MSBuildProjectName). Run: dotnet format $(MSBuildProjectFullPath)" />
+    <Touch Files="$(IntermediateOutputPath)format.stamp" AlwaysCreate="true" />
+  </Target>
+
+</Project>

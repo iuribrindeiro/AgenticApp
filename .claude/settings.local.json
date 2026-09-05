@@ -1,0 +1,9 @@
+{
+  "enabledMcpjsonServers": [
+    "fsharp"
+  ],
+  "skillOverrides": {
+    "tdd-to-jira-epic": "off"
+  },
+  "enableAllProjectMcpServers": true
+}
