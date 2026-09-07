@@ -437,3 +437,6 @@ FodyWeavers.xsd
 # Vendored third-party tooling, restored by .config/setup-fsi-mcp.sh
 .tools/fsi-mcp-server/
 .tools/*.log
+
+# check-unused-opens.sh mutex
+.config/.unused-opens.lock/

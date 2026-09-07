@@ -1,9 +1,11 @@
 {
+  "enableAllProjectMcpServers": true,
   "enabledMcpjsonServers": [
     "fsharp"
   ],
   "skillOverrides": {
     "tdd-to-jira-epic": "off"
   },
-  "enableAllProjectMcpServers": true
+  "outputStyle": "Proactive",
+  "spinnerTipsEnabled": false
 }

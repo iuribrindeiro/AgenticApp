@@ -1,16 +1,19 @@
 namespace AgenticApp.Domain
 
-/// The contract every value object implements.
-///
-/// This replaces looking up `create`/`value`/`describe` by name: a value object that
-/// does not implement these fails to compile, rather than silently dropping out of
-/// serialization and MCP schema generation.
+/// <summary>The contract every value object implements.</summary>
+/// <remarks>
+/// This replaces looking up `create`/`value`/`describe` by name: a value object that does not implement
+/// these fails to compile, rather than silently dropping out of serialization and MCP schema generation.
+/// </remarks>
 [<AutoOpen>]
 module ValueObject =
 
-    /// Non-generic markers. The generic interfaces below carry the self-referential
-    /// constraints that make `typedefof<_>` unusable, so detection keys off these -
-    /// still compile-checked, since renaming a marker breaks every implementer.
+    /// <summary>Non-generic markers.</summary>
+    /// <remarks>
+    /// The generic interfaces below carry the self-referential constraints that make `typedefof&lt;_&gt;`
+    /// unusable, so detection keys off these - still compile-checked, since renaming a marker breaks every
+    /// implementer.
+    /// </remarks>
     type IValueObjectMarker =
         interface
         end
@@ -29,9 +32,11 @@ module ValueObject =
         inherit IValueObjectMarker
         abstract Wire: 'Wire
 
-    /// Static side for a value object that can reject its input.
-    /// 'In is the *inbound* shape - what the outside world sends - and is generally
-    /// wider than IValueObject's 'Wire: `string | null` in, `string` out.
+    /// <summary>Static side for a value object that can reject its input.</summary>
+    /// <remarks>
+    /// 'In is the *inbound* shape - what the outside world sends - and is generally wider than
+    /// IValueObject's 'Wire: `string | null` in, `string` out.
+    /// </remarks>
     type IPartialValueObject<'Self, 'In, 'Err when 'Self :> IPartialValueObject<'Self, 'In, 'Err>> =
         inherit IPartialMarker
         static abstract Make: 'In -> Result<'Self, 'Err>

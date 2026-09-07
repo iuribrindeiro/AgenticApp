@@ -10,8 +10,11 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <Compile Include="ValueObjectNames.fs" />
+    <Compile Include="DomainLoader.fs" />
     <Compile Include="ValueObjectJson.fs" />
     <Compile Include="DomainDocs.fs" />
+    <Compile Include="DomainKnowledge.fs" />
     <Compile Include="DomainTools.fs" />
     <Compile Include="Program.fs" />
   </ItemGroup>

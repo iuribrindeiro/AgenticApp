@@ -1,8 +1,7 @@
 namespace AgenticApp.Mcp
 
-open AgenticApp.Domain
-
 open System
+open System.Collections.Concurrent
 open System.Reflection
 open System.Text.Json
 open System.Text.Json.Serialization
@@ -21,14 +20,32 @@ open ModelContextProtocol
 /// out of serialization and schema generation.
 module ValueObjectJson =
 
-    /// The generic interface behind a marker, e.g. IValueObject<string> behind IValueObjectMarker.
-    let private behind (marker: Type) (t: Type) =
-        t.GetInterfaces()
-        |> Array.tryFind (fun i -> i.IsGenericType && marker.IsAssignableFrom i)
+    /// Markers are resolved from the assembly of the type being inspected, not from a
+    /// static reference. A hot-reloaded Domain lives in its own AssemblyLoadContext, so
+    /// its `IValueObjectMarker` is a *different* Type from the statically referenced one
+    /// and `typeof<_>` comparisons silently fail - every value object would look like a
+    /// plain union. `ValueObjectNames` keeps the compile-time link; this keeps it working
+    /// across contexts.
+    let private markerCache = ConcurrentDictionary<string * string, Type | null>()
 
-    let wireInterface (t: Type) = behind typeof<IValueObjectMarker> t
-    let partialInterface (t: Type) = behind typeof<IPartialMarker> t
-    let totalInterface (t: Type) = behind typeof<ITotalMarker> t
+    let private marker (name: string) (t: Type) =
+        let asm = t.Assembly
+        let key = (asm.FullName |> Option.ofObj |> Option.defaultValue "", name)
+        markerCache.GetOrAdd(key, fun _ -> asm.GetType name)
+
+    /// The generic interface behind a marker, e.g. IValueObject<string> behind IValueObjectMarker.
+    let private behind (markerName: string) (t: Type) =
+        match marker markerName t with
+        | null -> None
+        | m ->
+            t.GetInterfaces()
+            |> Array.tryFind (fun i -> i.IsGenericType && m.IsAssignableFrom i)
+
+    let wireInterface (t: Type) =
+        behind ValueObjectNames.valueObjectMarker t
+
+    let partialInterface (t: Type) = behind ValueObjectNames.partialMarker t
+    let totalInterface (t: Type) = behind ValueObjectNames.totalMarker t
 
     let isValueObject (t: Type) =
         (wireInterface t).IsSome

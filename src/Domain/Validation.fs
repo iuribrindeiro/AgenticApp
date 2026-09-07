@@ -1,9 +1,13 @@
 namespace AgenticApp.Domain
 
-/// Accumulates every error instead of stopping at the first.
-/// Generic in 'E: each aggregate supplies its own error type.
-/// The alias is public because it appears in public signatures; the combinators
-/// below are internal - adapters pattern-match the Result, they never compose it.
+/// <summary>
+/// Accumulates every error instead of stopping at the first. Generic in 'E: each aggregate supplies its own
+/// error type.
+/// </summary>
+/// <remarks>
+/// The alias is public because it appears in public signatures; the combinators below are internal -
+/// adapters pattern-match the Result, they never compose it.
+/// </remarks>
 type Validation<'T, 'E> = Result<'T, 'E list>
 
 module internal Validation =

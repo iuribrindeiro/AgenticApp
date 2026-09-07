@@ -166,14 +166,14 @@ module DomainTools =
     /// Writes each parameter's documented meaning onto the finished schema. The schema
     /// generator does not surface ParameterInfo, so this cannot be done during
     /// generation; the property is settable, so it is done here instead.
-    let private withParameterDocs (doc: DomainDocs.Doc option) (tool: McpServerTool) =
-        match doc with
-        | Some doc when not doc.Parameters.IsEmpty ->
+    let private withParameterDocs (parameters: Map<string, string>) (tool: McpServerTool) =
+        match parameters with
+        | parameters when not parameters.IsEmpty ->
             match Nodes.JsonNode.Parse(tool.ProtocolTool.InputSchema.GetRawText()) with
             | :? Nodes.JsonObject as root ->
                 match root["properties"] with
                 | :? Nodes.JsonObject as props ->
-                    for name, text in Map.toSeq doc.Parameters do
+                    for name, text in Map.toSeq parameters do
                         match props[name] with
                         | :? Nodes.JsonObject as prop -> prop["description"] <- Nodes.JsonValue.Create text
                         | _ -> ()
@@ -185,29 +185,83 @@ module DomainTools =
 
         tool
 
-    /// Every exposable public function in the Domain assembly.
-    let all () : McpServerTool list =
+    /// Answers questions about the domain without anyone reading source. Two tools rather
+    /// than one because the jobs differ in cost: settling what the domain *allows* needs
+    /// only the types, while signatures are several times larger and are wanted only when
+    /// you are about to call or write something.
+    let private knowledgeTools (assembly: Assembly) (assemblyPath: string) : McpServerTool list =
+        let explainer = DomainExplainer(assembly, assemblyPath, isExposable, toolName)
+
+        let build name description paramDoc =
+            match explainer.GetType().GetMethod(name: string) with
+            | null -> []
+            | m ->
+                let createOpts =
+                    McpServerToolCreateOptions(
+                        Name = $"Domain.%s{name.ToLowerInvariant()}",
+                        Title = $"Domain.%s{name.ToLowerInvariant()}",
+                        Description = description,
+                        ReadOnly = true,
+                        OpenWorld = false,
+                        SerializerOptions = serializerOptions (),
+                        SchemaCreateOptions = schemaOptions ()
+                    )
+
+                [ McpServerTool.Create(m, box explainer, createOpts)
+                  |> withParameterDocs (Map.ofList [ "topics", paramDoc ]) ]
+
+        build
+            "Types"
+            ("What the domain allows: every documented type, its states, and the invariants that constrain them, "
+             + "read from the same doc comments as every other tool here. Start here for any question about "
+             + "behaviour - prefer it over reading src/Domain. Call with no topics for the whole domain.")
+            ("Domain words to narrow the answer to, e.g. [\"online\"] or [\"blocked\", \"assign\"]. Ask about "
+             + "several at once rather than calling again - the fixed cost is paid per call. Omit for every "
+             + "documented type.")
+        @ build
+            "Functions"
+            ("Signature, intent and parameters for the domain's public functions, each of which is also an MCP tool "
+             + "of the same name. Ask for this when you are about to call one or write code against it; for what the "
+             + "domain allows, use Domain.types instead - it is much smaller.")
+            ("Domain words to narrow the answer to, e.g. [\"invite\"] or [\"online\", \"order\"]. Ask about "
+             + "several at once rather than calling again. Omit for every function.")
+
+    /// Every exposable public function in the given Domain assembly.
+    ///
+    /// The assembly is a parameter rather than `typeof<_>.Assembly` so the server can
+    /// serve a hot-reloaded copy living in its own AssemblyLoadContext.
+    let forAssembly (assembly: Assembly) (assemblyPath: string) : McpServerTool list =
         let opts = serializerOptions ()
+        let docs = DomainDocs.load assemblyPath
+
+        knowledgeTools assembly assemblyPath
+        @ (assembly.GetTypes()
+           |> Seq.filter (fun t -> t.IsPublic || t.IsNestedPublic)
+           |> Seq.collect (fun t ->
+               t.GetMethods(BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.DeclaredOnly))
+           |> Seq.filter isExposable
+           |> Seq.map (fun m ->
+               let createOpts =
+                   McpServerToolCreateOptions(
+                       Name = toolName m,
+                       Title = toolName m,
+                       Description = (DomainDocs.docFor docs m |> Option.map _.Summary |> Option.defaultValue ""),
+                       ReadOnly = true,
+                       OpenWorld = false,
+                       SerializerOptions = opts,
+                       SchemaCreateOptions = schemaOptions ()
+                   )
+
+               McpServerTool.Create(m, (null: obj | null), createOpts)
+               |> withParameterDocs (
+                   DomainDocs.docFor docs m
+                   |> Option.map _.Parameters
+                   |> Option.defaultValue Map.empty
+               ))
+           |> List.ofSeq)
+
+    /// The statically referenced Domain - used by the audit, which has no reason to
+    /// reload anything.
+    let all () : McpServerTool list =
         let assembly = typeof<StoreModel.Store>.Assembly
-        let docs = DomainDocs.load assembly
-
-        assembly.GetTypes()
-        |> Seq.filter (fun t -> t.IsPublic || t.IsNestedPublic)
-        |> Seq.collect (fun t ->
-            t.GetMethods(BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.DeclaredOnly))
-        |> Seq.filter isExposable
-        |> Seq.map (fun m ->
-            let createOpts =
-                McpServerToolCreateOptions(
-                    Name = toolName m,
-                    Title = toolName m,
-                    Description = (DomainDocs.docFor docs m |> Option.map _.Summary |> Option.defaultValue ""),
-                    ReadOnly = true,
-                    OpenWorld = false,
-                    SerializerOptions = opts,
-                    SchemaCreateOptions = schemaOptions ()
-                )
-
-            McpServerTool.Create(m, (null: obj | null), createOpts)
-            |> withParameterDocs (DomainDocs.docFor docs m))
-        |> List.ofSeq
+        forAssembly assembly assembly.Location

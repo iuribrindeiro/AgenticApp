@@ -84,16 +84,16 @@ module Primitives =
     module ReqStr =
         /// <summary>Validates a required string. Returns Ok with the trimmed value, or Error if it is null, empty or whitespace.</summary>
         /// <param name="value">The raw string. Must be non-blank.</param>
-        let create (value: string | null) : Result<ReqStr, ReqStrError> =
+        let create (value: string | null) =
             make<ReqStr, _, _> value
 
         /// <summary>Unwraps a validated required string.</summary>
         /// <param name="v">The validated string.</param>
-        let value (v: ReqStr) : string = (v :> IValueObject<string>).Wire
+        let value (reqStr: ReqStr) = (reqStr :> IValueObject<string>).Wire
 
         /// <summary>Renders a ReqStr failure as a sentence fragment.</summary>
         /// <param name="e">The failure to describe.</param>
-        let describe (e: ReqStrError) = explain<ReqStr, _, _> e
+        let describe error = explain<ReqStr, _, _> error
 ```
 
 Four mechanics that are load-bearing:
@@ -202,6 +202,27 @@ mandatory rather than stylistic.
 
 Never register the F# union converter app-wide: a converter broad enough to read a domain type can also
 write one, and that is exactly the hole `private` exists to close.
+
+
+## Types are inferred
+
+Never annotate a return type. Annotate a parameter only where the compiler or the **tool schema** needs
+it: a `string | null` boundary (redundant to F#, but the schema loses `"null"` without it — the audit
+fails that as `NON-NULL STRING`), a parameter matched against `| null`, an interface implementation, a
+generic, or a value reached only through a coercion. `Nullable<T>` needs nothing.
+
+Carry the meaning in the **parameter name** instead (`deliveryman`, not `d`) — it is also the MCP
+schema's property name. See the full rule in CLAUDE.md.
+
+
+## Doc comments split in two
+
+`<summary>` is one sentence — the rule — and is shown on every match, being also the MCP tool's
+description. `<remarks>` holds the reasoning and edge cases, and `Domain.types` reveals it only to a
+reader who asked about this thing by name. Write the reasoning either way; put it in the right tag.
+`tools/McpAudit` fails a summary over 200 chars as `LONG SUMMARY`. In a tagged comment you must escape
+`<`, `>` and `&` yourself — F# only escapes untagged ones, and one stray `<` makes `Domain.xml`
+unparseable, which costs every tool its description.
 
 ## Checklist
 

@@ -188,13 +188,13 @@ module CustomerModel =
         // Accessors return primitives so they are usable on the wire; the value objects
         // are public, so an in-process caller can reach for the wrapped type when it wants
         // one. Each needs a /// doc comment - it becomes the MCP tool description.
-        let name (c: Customer) : string = ReqStr.value c.Name
+        let name customer = ReqStr.value customer.Name
         let nickname (c: Customer) : string option = OptStr.value c.Nickname
         let signedUpAt (c: Customer) : DateTimeOffset = ReqDateTimeOffset.value c.SignedUpAt
         let status (c: Customer) = c.Status
 
         /// Transitions take built value objects and validate nothing: the types already did.
-        let deactivate (at: ReqDateTimeOffset) (reason: ReqStr) (c: Customer) : Result<Customer, DeactivateError> =
+        let deactivate at reason customer =
             match c.Status with
             | CustomerStatus.Deactivated(since, _) -> Error(DeactivateError.AlreadyDeactivated since)
             | CustomerStatus.Active ->
@@ -203,13 +203,13 @@ module CustomerModel =
                 else
                     Ok { c with Status = CustomerStatus.Deactivated(at, reason) }
 
-        let reactivate (c: Customer) : Result<Customer, ReactivateError> =
+        let reactivate customer =
             match c.Status with
             | CustomerStatus.Active -> Error ReactivateError.NotDeactivated
             | CustomerStatus.Deactivated _ -> Ok { c with Status = CustomerStatus.Active }
 
         /// Plain data edits need no state check - they are legal in every state.
-        let rename (newName: ReqStr) (c: Customer) : Customer = { c with Name = newName }
+        let rename newName customer = { customer with Name = newName }
 ```
 
 Points worth copying:
@@ -223,9 +223,9 @@ Points worth copying:
   happened once, in the value object's own `create`:
 
   ```fsharp
-  let rename (newName: ReqStr) (s: Store) : Store = { s with Name = newName }
+  let rename newName store = { store with Name = newName }
 
-  let assignDeliveryman (deliveryman: DeliverymanId) (s: Store) : Result<Store, AssignDeliverymanError> =
+  let assignDeliveryman deliveryman store =
       if List.contains deliveryman s.Deliverymen then
           Error(AssignDeliverymanError.AlreadyAssigned(DeliverymanId.value deliveryman))
       else
@@ -277,13 +277,49 @@ meaningful in some states, it goes in those cases, not on the record. A field ad
 Match states explicitly.
 
 A transition **is** an MCP tool automatically — registration is by convention, and its parameters are
-all safe: value objects have validating converters, and the model is a public record built only from
-those. You add no attribute; you add a `///` doc comment. See `add-domain-function`.
+all safe. You add no attribute; you add a `///` doc comment.
+
+This composes further than it first looks, so do not build plumbing you do not need: a **union of value
+objects** is exposable, and so is a **collection value object over such a union**, whose `Make` may take
+already-built elements (`Membership array | null`) rather than raw ones. A whole model and every one of
+its transitions therefore register with no extra work, provided each field bottoms out in a value
+object, a wire shape, or a record/union/array of those. `add-domain-function` has the full table, and
+`dotnet run --project tools/McpAudit -- --report` answers it for a specific type.
 
 **Rehydrating from a repository:** repositories rebuild models from persisted data, which means
 reconstructing a state that `create` cannot produce. Give the model an explicit function for it that
 validates the same way, and keep it obviously distinct from `create` so normal code doesn't reach for
 it. A stored row that cannot be rebuilt is corrupt data — return the error, don't coerce it.
+
+## Write the invariant where it can be found
+
+A model's rules should be readable from the tool list without opening the file. `StoreMemberships.create`
+saying *"Each store may appear once, and at most one membership may be Online"* answers "can he be online
+at two stores?" outright. The same rule left only in the code costs a search every time it is asked.
+
+So when a `create` or a transition enforces something, state it in that function's `///` summary — the
+constraint, not just the mechanics. See `add-domain-function`.
+
+
+## Types are inferred
+
+Never annotate a return type. Annotate a parameter only where the compiler or the **tool schema** needs
+it: a `string | null` boundary (redundant to F#, but the schema loses `"null"` without it — the audit
+fails that as `NON-NULL STRING`), a parameter matched against `| null`, an interface implementation, a
+generic, or a value reached only through a coercion. `Nullable<T>` needs nothing.
+
+Carry the meaning in the **parameter name** instead (`deliveryman`, not `d`) — it is also the MCP
+schema's property name. See the full rule in CLAUDE.md.
+
+
+## Doc comments split in two
+
+`<summary>` is one sentence — the rule — and is shown on every match, being also the MCP tool's
+description. `<remarks>` holds the reasoning and edge cases, and `Domain.types` reveals it only to a
+reader who asked about this thing by name. Write the reasoning either way; put it in the right tag.
+`tools/McpAudit` fails a summary over 200 chars as `LONG SUMMARY`. In a tagged comment you must escape
+`<`, `>` and `&` yourself — F# only escapes untagged ones, and one stray `<` makes `Domain.xml`
+unparseable, which costs every tool its description.
 
 ## Checklist
 
@@ -303,6 +339,10 @@ it. A stored row that cannot be rebuilt is corrupt data — return the error, do
    null probe from `add-value-object`.
 11. Does every public function carry a `///` `<summary>` and a `<param>` per parameter? They become the
    MCP tool's description and schema, and `tools/McpAudit` fails without them.
+12. Does the **model type and each state DU** carry a `///` summary? `Domain.types` lists every
+   documented type with its cases and fields — that is where an agent reads what states exist and which
+   combinations are impossible, without opening source. Put a collection-wide invariant on the type that
+   owns it. Nothing to regenerate: it is read from the assembly per call.
 11. Does `dotnet build AgenticApp.slnx` — it fails on any warning (FS0025, FS1182, FS3261, FS3264, FS3265)
    **and on formatting drift**; run `dotnet fantomas src tools` to fix that.
 

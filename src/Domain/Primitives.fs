@@ -31,17 +31,18 @@ module Primitives =
                 match e with
                 | ReqStrError.Missing -> "is required"
 
+    [<ReflectedDefinition>]
     module ReqStr =
         /// <summary>Validates a required string. Returns Ok with the trimmed value, or Error if it is null, empty or whitespace.</summary>
         /// <param name="value">The raw string. Must be non-blank.</param>
-        let create (value: string | null) : Result<ReqStr, ReqStrError> = make<ReqStr, _, _> value
+        let create (value: string | null) = make<ReqStr, _, _> value
 
         /// <summary>Unwraps a validated required string.</summary>
-        /// <param name="v">The validated string.</param>
-        let value (v: ReqStr) : string = (v :> IValueObject<string>).Wire
+        /// <param name="reqStr">The validated string.</param>
+        let value (reqStr: ReqStr) = (reqStr :> IValueObject<string>).Wire
         /// <summary>Renders a ReqStr failure as a sentence fragment.</summary>
-        /// <param name="e">The failure to describe.</param>
-        let describe (e: ReqStrError) = explain<ReqStr, _, _> e
+        /// <param name="error">The failure to describe.</param>
+        let describe error = explain<ReqStr, _, _> error
 
     // ------------------------------------------------------------- OptStr
 
@@ -61,14 +62,16 @@ module Primitives =
                 | v when String.IsNullOrWhiteSpace v -> OptStr None
                 | v -> OptStr(Some(v.Trim()))
 
+    [<ReflectedDefinition>]
     module OptStr =
         /// <summary>Normalises an optional string. Null, empty or whitespace become absent; anything else is trimmed. Cannot fail.</summary>
         /// <param name="value">The raw string. May be null or blank.</param>
-        let create (value: string | null) : OptStr = makeTotal<OptStr, _> value
+        let create (value: string | null) = makeTotal<OptStr, _> value
 
         /// <summary>Unwraps an optional string as Some trimmed value, or None when absent.</summary>
-        /// <param name="v">The optional string.</param>
-        let value (v: OptStr) : string option = (v :> IValueObject<string option>).Wire
+        /// <param name="optStr">The optional string.</param>
+        let value (optStr: OptStr) =
+            (optStr :> IValueObject<string option>).Wire
 
     // --------------------------------------------------- ReqDateTimeOffset
 
@@ -100,20 +103,20 @@ module Primitives =
                 | ReqDateTimeOffsetError.Missing -> "is required"
                 | ReqDateTimeOffsetError.Unrepresentable v -> $"holds an unrepresentable instant (%O{v})"
 
+    [<ReflectedDefinition>]
     module ReqDateTimeOffset =
         /// <summary>Validates a required instant. Returns Error if absent, or if it is the unset sentinel (DateTimeOffset.MinValue).</summary>
         /// <param name="value">The raw instant. Must be present and not MinValue.</param>
-        let create (value: Nullable<DateTimeOffset>) : Result<ReqDateTimeOffset, ReqDateTimeOffsetError> =
-            make<ReqDateTimeOffset, _, _> value
+        let create value = make<ReqDateTimeOffset, _, _> value
 
         /// <summary>Unwraps a validated required instant.</summary>
-        /// <param name="v">The validated instant.</param>
-        let value (v: ReqDateTimeOffset) : DateTimeOffset =
-            (v :> IValueObject<DateTimeOffset>).Wire
+        /// <param name="reqDateTimeOffset">The validated instant.</param>
+        let value (reqDateTimeOffset: ReqDateTimeOffset) =
+            (reqDateTimeOffset :> IValueObject<DateTimeOffset>).Wire
 
         /// <summary>Renders a required-instant failure as a sentence fragment.</summary>
-        /// <param name="e">The failure to describe.</param>
-        let describe (e: ReqDateTimeOffsetError) = explain<ReqDateTimeOffset, _, _> e
+        /// <param name="error">The failure to describe.</param>
+        let describe error = explain<ReqDateTimeOffset, _, _> error
 
     // --------------------------------------------------- OptDateTimeOffset
 
@@ -143,17 +146,17 @@ module Primitives =
                 match e with
                 | OptDateTimeOffsetError.Unrepresentable v -> $"holds an unrepresentable instant (%O{v})"
 
+    [<ReflectedDefinition>]
     module OptDateTimeOffset =
         /// <summary>Validates an optional instant. Absence is allowed; a present MinValue is an error.</summary>
         /// <param name="value">The raw instant. May be absent, but must not be MinValue when present.</param>
-        let create (value: Nullable<DateTimeOffset>) : Result<OptDateTimeOffset, OptDateTimeOffsetError> =
-            make<OptDateTimeOffset, _, _> value
+        let create value = make<OptDateTimeOffset, _, _> value
 
         /// <summary>Unwraps an optional instant as Some value, or None when absent.</summary>
-        /// <param name="v">The optional instant.</param>
-        let value (v: OptDateTimeOffset) : DateTimeOffset option =
-            (v :> IValueObject<DateTimeOffset option>).Wire
+        /// <param name="optDateTimeOffset">The optional instant.</param>
+        let value (optDateTimeOffset: OptDateTimeOffset) =
+            (optDateTimeOffset :> IValueObject<DateTimeOffset option>).Wire
 
         /// <summary>Renders an optional-instant failure as a sentence fragment.</summary>
-        /// <param name="e">The failure to describe.</param>
-        let describe (e: OptDateTimeOffsetError) = explain<OptDateTimeOffset, _, _> e
+        /// <param name="error">The failure to describe.</param>
+        let describe error = explain<OptDateTimeOffset, _, _> error

@@ -17,6 +17,8 @@
     <Compile Include="Validation.fs" />
     <Compile Include="Ids.fs" />
     <Compile Include="Store.fs" />
+    <Compile Include="Deliveryman.fs" />
+    <Compile Include="Order.fs" />
   </ItemGroup>
 
 </Project>

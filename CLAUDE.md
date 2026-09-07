@@ -1,143 +1,136 @@
 # CLAUDE.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
-
 ## Status
 
-Three projects exist: `src/Domain` (the F# domain), `tools/Mcp` (the MCP server), and `tools/McpAudit`
-(the coverage guard). The adapters — REST, gRPC, SignalR, Orleans — and the MongoDB repositories are not
+`src/Domain` (the F# domain: `Store`, `Deliveryman`), `tools/Mcp` (the MCP server), `tools/McpAudit`
+(the coverage guard). Adapters — REST, gRPC, SignalR, Orleans — and the MongoDB repositories are not
 built yet. **There are no tests**; do not add or run them until asked.
 
-Target **.NET 10** everywhere and use the **latest stable version of every package/framework** unless a
-pin is explicitly justified in the fsproj/csproj.
+Target **.NET 10** and the **latest stable version of every package**, unless a pin is justified in the
+project file.
 
 ## Architecture
 
-- **Domain** — an **F# class library** (`src/Domain`). It exposes only *types* and *pure functions*. No
-  I/O, no async over I/O, no dependency on any other project in the solution. All business logic lives
-  here, and it has **no package references at all** — exposure over MCP is entirely `tools/Mcp`'s job.
-- **Mcp** (`tools/Mcp`) — references Domain, and is also the **MCP server itself** (stdio). Holds
-  everything about *exposing* the domain over MCP: the
-  value-object JSON converters (deserialization routes through `Make`, so it validates rather than
-  forges) and `DomainTools.all()`, which builds the tool list with both serializer and schema options.
-  Serialization concerns live here, never in Domain. It sits under `tools/` because the MCP server is a
-  development-only surface for agent clients, not part of the shipped application.
-- **Adapters** — REST API, gRPC services, SignalR hubs (Redis backplane), and Orleans grains. These are
-  **thin**: parse/validate input, call a Domain function, map the result out. They may call repositories
-  to fetch and persist data. They must not contain business logic — if a rule needs writing, it belongs
-  in the F# Domain project.
-- **Repositories** — MongoDB is the data store. Repositories only fetch and persist; no business rules.
-  They are injected into adapters and are **never** referenced from Domain code.
+- **Domain** (`src/Domain`) — F# class library exposing only *types* and *pure functions*. No I/O, no
+  dependency on any other project, and **no package references at all**. All business logic lives here.
+- **Mcp** (`tools/Mcp`) — references Domain and is the stdio MCP server. Owns everything about
+  *exposing* the domain: the value-object JSON converters (deserialisation routes through `Make`, so it
+  validates rather than forges) and `DomainTools.all()`. Serialisation never leaks into Domain.
+- **Adapters** — REST, gRPC, SignalR (Redis backplane), Orleans grains. **Thin**: parse input, call a
+  Domain function, map the result out. They may call repositories. No business logic — a rule belongs in
+  Domain.
+- **Repositories** — MongoDB. Fetch and persist only; injected into adapters, **never** referenced from
+  Domain.
 
 ## MCP tool parity (non-negotiable)
 
-The app also hosts an **MCP server, enabled in Development only**, which Claude Code attaches to.
-Every one of the following must have a corresponding MCP tool that invokes it directly:
+Every REST endpoint, gRPC method, SignalR hub method, Orleans grain method and public Domain function
+must have an MCP tool that invokes it. Adding one without its tool is an incomplete change — use
+`/add-rest-endpoint`, `/add-grpc-method`, `/add-signalr-method`, `/add-orleans-grain-method`,
+`/add-domain-function`.
 
-- each REST API endpoint
-- each gRPC method
-- each SignalR hub method
-- each Orleans grain method
-- each publicly exposed F# Domain function
+Registration is **by convention, not by attribute**: `DomainTools.all()` exposes every public Domain
+function whose parameters are all *safe*. A tool's name is its code path (`Store.rename`) and its
+description is its `///` doc comment — write the comment and the tool documents itself; skip it and
+`tools/McpAudit` fails. See `/add-domain-function` for what makes a parameter safe.
 
-Adding one of these without its MCP tool is an incomplete change. Use the matching skill so the tool is
-registered in the same pass: `/add-rest-endpoint`, `/add-grpc-method`, `/add-signalr-method`,
-`/add-orleans-grain-method`, `/add-domain-function`.
+## Doc comments: one sentence in `<summary>`, the reasoning in `<remarks>`
 
-Registration is **by convention, not by attribute** — there is nothing to forget. `DomainTools.all()`
-exposes every public Domain function whose parameters are all *safe* — meaning both **unforgeable** (a
-deserializer cannot produce a value the domain would reject) and **schematisable** (it can be given a
-schema a model can fill). Wire shapes, value objects, unions, and records and lists built from those all
-qualify. If a public function ever needs to be kept off the wire, add an opt-out attribute then — there
-is none today because nothing has needed one.
+Both types and functions. `<summary>` is the rule in a sentence; it is the MCP tool's description and is
+shown on **every** match, so an essay there is paid for by every reader of every broad question.
+`<remarks>` carries the why and the edge cases, and `Domain.types` shows it only to a reader who asked
+about that thing **by name or case** — not to one who matched its prose incidentally. Write the
+reasoning; just put it in the right tag.
 
-- **The tool's name is its code path** — `Store.rename`, `ReqStr.create`.
-- **Its description is its `///` doc comment**: `<summary>` becomes the tool description and each
-  `<param name="x">` becomes that parameter's schema description. Write the doc comment and the tool
-  documents itself; skip it and `tools/McpAudit` fails the build.
+- `tools/McpAudit` fails a summary over 200 characters as `LONG SUMMARY`.
+- **Escape `<`, `>` and `&`** once a comment uses tags: F# escapes *untagged* doc comments for you and
+  passes tagged ones through verbatim, so a bare `typedefof<_>` makes `Domain.xml` unparseable — which
+  silently costs every tool its description.
 
-See `/add-domain-function`.
+## Answering questions about the domain
 
-## First-time setup
+**Always call `Domain.types` first — before any grep, file read, or search for individual tools.** It is
+an MCP tool on the `domain` server that renders the domain's types, their states, the invariants that
+constrain them, and every rejection named after your topics, out of the same `///` comments that describe
+every other tool. It is generated per call from the loaded assembly, so it is never stale.
 
-None: `dotnet restore` (so, any build) bootstraps the F# language tooling on a fresh clone via
-`Directory.Build.targets`, once per clone, guarded by `.config/.fslangmcp-bootstrapped`. Pass
-`-p:FsLangMcpBootstrap=false` to skip it, e.g. in CI.
+`topics` takes an **array**, so ask about everything you need in **one call** — `["online", "blocked"]`,
+not one call each. Each call re-pays a fixed cost, and two narrow calls come to more than one wider one.
+Omit `topics` for the whole domain.
 
-It has to run because FsLangMCP's bootstrap installs fsautocomplete, ProjInfo and Fantomas as **global**
-tools; the local manifest alone leaves the MCP server failing with
-`An error occurred trying to start process 'fsautocomplete'`.
+That holds for **every** question about domain behaviour — what is allowed, what a state means, what
+happens in some situation. No question shape justifies skipping it, and it is usually the whole answer.
 
-`.mcp.json` registers two MCP servers for anyone opening this repo in Claude Code.
+`Domain.functions` is its companion: signature, intent and parameters. It is several times larger, so
+reach for it when you are about to call a function or write code against one, not to settle what the
+domain allows.
 
-**`domain`** serves this project's own domain functions — every `[<McpServerTool>]` in the Domain
-assembly, currently 11. It runs via `dotnet run --project tools/Mcp`, so it rebuilds on start and always
-reflects the current domain code. Two rules keep the stdio transport intact: all logging goes to stderr
-(`LogToStandardErrorThreshold`), and validation failures are raised as `McpException` — a `JsonException`
-from argument binding reaches the client only as a generic "An error occurred invoking '<tool>'", losing
-the reason.
+- **Run a function** on real input → call its own tool. Names are code paths, loaded every session.
+- **A multi-step scenario** → the `fsi` server; one script keeps values in scope, where chaining tool
+  calls means threading JSON between them by hand.
+- **Structure** (signatures, callers, dead code) → the `fsharp` server (`fcs_public_api`,
+  `fcs_project_outline`). It is compiler-backed; prefer it over grepping for F# symbols.
 
-**`fsharp`** registers **FsLangMCP** for anyone opening this repo in Claude
-Code. It gives compiler-backed F# intelligence — `find` for cross-project symbol search, `check` for a
-real compilation verdict, type info, refactoring previews — instead of text search. Prefer it over
-grepping for F# symbols. It preloads `src/Domain/Domain.fsproj`; call `set_project` to point it
-elsewhere.
+**Never grep `src/Domain` to answer a question — `Domain.types` already proves absence.** Every domain
+module is `[<ReflectedDefinition>]`, so the tool reads each function's compiled quotation and reports
+exactly which functions branch on a state and what each can return. That list is complete over every
+exposed function, so a function missing from it does not test that state at all. `tools/McpAudit` fails
+as `NO QUOTATION` if any function lacks one, which is what keeps the claim honest. Read the source only
+when you are changing it.
+
+If a rule was hard to find, the fix is a better `///` summary: it improves the tool description and
+`Domain.types` in one edit.
+
+**Build the solution, not `Domain.fsproj`.** The server hot-reloads from its own output copy of
+`Domain.dll`, so `dotnet build AgenticApp.slnx` refreshes the tool list mid-session, while building the
+Domain project alone updates a copy the server never reads.
 
 ## Commands
 
 ```
 dotnet build AgenticApp.slnx
-dotnet run --project tools/McpAudit             # MCP tool coverage + labelling; exit 1 on problems
+dotnet run --project tools/McpAudit             # tool coverage + labelling; exit 1 on problems
 dotnet run --project tools/McpAudit -- --report # every public Domain function, and why it is/isn't a tool
-tools/check-unused-opens.sh                     # unused `open`s; --fix removes them (slow: one build each)
-dotnet format <project>               # C# only; F# is not formatted by dotnet format
+tools/check-unused-opens.sh                     # unused `open`s; --fix removes them (one build each, slow)
+dotnet fantomas src tools                       # fix F# formatting (pinned 7.0.6)
+dotnet format <project>                         # fix C#; F# is not formatted by dotnet format
 ```
 
-`tools/McpAudit` fails if a public Domain function that could be an MCP tool is not one, or if a tool
-lacks a name, title, or descriptions. Run it after changing any public Domain function.
+A fresh clone needs no setup — any build bootstraps the F# tooling once (`-p:FsLangMcpBootstrap=false`
+skips it). Run the audit after changing any public Domain function.
+
+## Type inference over annotations
+
+F# infers types; state them only where the compiler or the **tool schema** needs them. Carry the meaning
+in the parameter's **name** instead — camelCase of its type (`deliveryman`, `storeMemberships`, `error`),
+never `d`, `v` or `e`. That name is also the MCP schema's property name, so a vague one reaches every
+client.
+
+**Never annotate a return type.** Keep a parameter's annotation only for a `string | null` boundary (the
+schema loses `"null"` without it, though F# does not care), a parameter matched against `| null`, an
+interface implementation, a generic, or a value reached only through a coercion. `Nullable<T>` needs
+nothing; everything else drops.
+
+Going too far fails two ways that the compiler cannot see, so `tools/McpAudit` owns them: **`GENERIC`**
+(an over-generalised function silently vanishes from the tool list) and **`NON-NULL STRING`** (the
+narrowing above). It may also leave an `open` unused — `tools/check-unused-opens.sh`. Reasoning and
+examples are in `/add-value-object`.
 
 ## Build strictness
 
-Projects treat these as **errors**, not warnings:
+Warnings are errors. F#: **FS0025** (unhandled DU case), **FS1182** (unused value or parameter),
+**FS3261/FS3264/FS3265** (nullness — a boundary parameter says `string | null` or `Nullable<T>`
+explicitly, and nothing past it may be null). C# sets `TreatWarningsAsErrors`.
 
-- **FS0025** — an unhandled DU case. Adding a state must break every site that ignores it.
-- **FS1182** — an unused value or parameter. It is opt-in, so it needs
-  `<OtherFlags>$(OtherFlags) --warnon:1182</OtherFlags>` alongside the `WarningsAsErrors` entry.
-- **FS3261 / FS3264 / FS3265** — nullness. A boundary parameter must say `string | null` or
-  `Nullable<T>` explicitly; nothing past it may be null, and no downcast may reintroduce one.
-
-C# projects set `<TreatWarningsAsErrors>true</TreatWarningsAsErrors>`. A build that emits warnings is a
-build that is failing slowly, so the count stays at zero.
+Formatting is verified by the **build** rather than an editor or hook, so it holds in CI too; drift
+fails the build and `-p:VerifyFormat=false` skips it. `src/Domain/ValueObject.fs` is in `.fantomasignore`
+because Fantomas 7.0.6 emits invalid F# for static abstract members, so it stays hand-formatted.
 
 ## No unused code
 
-Nothing in this repo may be unused: no unused function (private or public), type, case, parameter, or
-`open`. If something has no caller, delete it rather than leaving it for a future caller that may not
-arrive. Write the function when the thing that needs it exists.
+Nothing may be unused: no function (private or public), type, case, parameter or `open`. If something
+has no caller, delete it rather than leaving it for a future caller that may not arrive. Write the
+function when the thing that needs it exists.
 
-FS1182 covers unused locals and parameters only.
-
-**Unused `open`s** have no compiler warning and no analyzer package (Ionide.Analyzers has none), so
-`tools/check-unused-opens.sh` asks the compiler directly: it blanks each `open`, rebuilds, and reports
-the ones that still compile. Exact rather than heuristic, but ~1 build per `open`, so run it before a
-PR rather than on every build. `--fix` deletes them.
-
-**Unused functions** have no check at all — F# warns on neither private nor public ones. That is
-enforced by review, by `dotnet run --project tools/McpAudit -- --report`, and by deleting on sight.
-
-## Formatting
-
-Formatting is verified by the **build**, not by an editor or agent hook, so it holds for every developer
-and in CI. `Directory.Build.targets` runs `fantomas --check` on `.fsproj` projects and
-`dotnet format --verify-no-changes` on `.csproj` ones after Build; drift fails the build like any
-warning. Both are incremental via a stamp file — a repeat build skips them.
-
-```
-dotnet fantomas src tools     # fix F#   (pinned 7.0.6 in .config/dotnet-tools.json)
-dotnet format <project>       # fix C#   (style in .editorconfig)
-```
-
-Pass `-p:VerifyFormat=false` to skip. `src/Domain/ValueObject.fs` is in `.fantomasignore`: Fantomas
-7.0.6 cannot format interfaces with static abstract members and emits invalid F#, so it stays
-hand-formatted.
-
+FS1182 catches only locals and parameters. Unused `open`s need `tools/check-unused-opens.sh` (run before
+a PR). Unused functions have no check at all — delete on sight.
