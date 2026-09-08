@@ -1,0 +1,4 @@
+{
+  "reimplementsFunction": { "enabled": true },
+  "canBeReplacedWithComposition": { "enabled": true }
+}

@@ -34,19 +34,6 @@ function whose parameters are all *safe*. A tool's name is its code path (`Store
 description is its `///` doc comment — write the comment and the tool documents itself; skip it and
 `tools/McpAudit` fails. See `/add-domain-function` for what makes a parameter safe.
 
-## Doc comments: one sentence in `<summary>`, the reasoning in `<remarks>`
-
-Both types and functions. `<summary>` is the rule in a sentence; it is the MCP tool's description and is
-shown on **every** match, so an essay there is paid for by every reader of every broad question.
-`<remarks>` carries the why and the edge cases, and `Domain.types` shows it only to a reader who asked
-about that thing **by name or case** — not to one who matched its prose incidentally. Write the
-reasoning; just put it in the right tag.
-
-- `tools/McpAudit` fails a summary over 200 characters as `LONG SUMMARY`.
-- **Escape `<`, `>` and `&`** once a comment uses tags: F# escapes *untagged* doc comments for you and
-  passes tagged ones through verbatim, so a bare `typedefof<_>` makes `Domain.xml` unparseable — which
-  silently costs every tool its description.
-
 ## Answering questions about the domain
 
 **Always call `Domain.types` first — before any grep, file read, or search for individual tools.** It is
@@ -94,27 +81,11 @@ dotnet run --project tools/McpAudit -- --report # every public Domain function, 
 tools/check-unused-opens.sh                     # unused `open`s; --fix removes them (one build each, slow)
 dotnet fantomas src tools                       # fix F# formatting (pinned 7.0.6)
 dotnet format <project>                         # fix C#; F# is not formatted by dotnet format
+dotnet fsharplint lint -l fsharplint.json --file-type wildcard "src/Domain/*.fs"  # read lint findings
 ```
 
 A fresh clone needs no setup — any build bootstraps the F# tooling once (`-p:FsLangMcpBootstrap=false`
 skips it). Run the audit after changing any public Domain function.
-
-## Type inference over annotations
-
-F# infers types; state them only where the compiler or the **tool schema** needs them. Carry the meaning
-in the parameter's **name** instead — camelCase of its type (`deliveryman`, `storeMemberships`, `error`),
-never `d`, `v` or `e`. That name is also the MCP schema's property name, so a vague one reaches every
-client.
-
-**Never annotate a return type.** Keep a parameter's annotation only for a `string | null` boundary (the
-schema loses `"null"` without it, though F# does not care), a parameter matched against `| null`, an
-interface implementation, a generic, or a value reached only through a coercion. `Nullable<T>` needs
-nothing; everything else drops.
-
-Going too far fails two ways that the compiler cannot see, so `tools/McpAudit` owns them: **`GENERIC`**
-(an over-generalised function silently vanishes from the tool list) and **`NON-NULL STRING`** (the
-narrowing above). It may also leave an `open` unused — `tools/check-unused-opens.sh`. Reasoning and
-examples are in `/add-value-object`.
 
 ## Build strictness
 
@@ -122,15 +93,17 @@ Warnings are errors. F#: **FS0025** (unhandled DU case), **FS1182** (unused valu
 **FS3261/FS3264/FS3265** (nullness — a boundary parameter says `string | null` or `Nullable<T>`
 explicitly, and nothing past it may be null). C# sets `TreatWarningsAsErrors`.
 
-Formatting is verified by the **build** rather than an editor or hook, so it holds in CI too; drift
-fails the build and `-p:VerifyFormat=false` skips it. `src/Domain/ValueObject.fs` is in `.fantomasignore`
-because Fantomas 7.0.6 emits invalid F# for static abstract members, so it stays hand-formatted.
+Formatting and lint are checked by the **build**, not by an editor or a hook, so they hold in CI and for
+everyone: drift fails it (`-p:VerifyFormat=false` skips), and so do lint findings
+(`-p:VerifyLint=false` skips). Two caveats behind those checks:
 
-## No unused code
+- `src/Domain/ValueObject.fs` is in `.fantomasignore` because Fantomas 7.0.6 emits invalid F# for static
+  abstract members, so it stays hand-formatted.
+- `fsharplint.json` enables two rules: FL0034 `ReimplementsFunction` and FL0035
+  `CanBeReplacedWithComposition`. FL0035 only fires on chains of **three or more** functions — the
+  threshold is a literal in the rule, not a setting — so two-function compositions rest on review.
 
-Nothing may be unused: no function (private or public), type, case, parameter or `open`. If something
-has no caller, delete it rather than leaving it for a future caller that may not arrive. Write the
-function when the thing that needs it exists.
+`tools/McpAudit` and `tools/check-unused-opens.sh` are **not** in the build; run them yourself.
 
-FS1182 catches only locals and parameters. Unused `open`s need `tools/check-unused-opens.sh` (run before
-a PR). Unused functions have no check at all — delete on sight.
+F# style — doc comments, annotations, combinators, unused code — is in `.claude/rules/fsharp-style.md`,
+which loads when you open an F# file.

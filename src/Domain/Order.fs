@@ -123,7 +123,8 @@ module OrderModel =
                   Store = s
                   Status = OrderStatus.Preparing }
 
-            build <!> Validation.field OrderError.Id (OrderId.create orderId)
+            build
+            <!> Validation.field OrderError.Id (OrderId.create orderId)
             <*> Validation.field OrderError.Client (ClientId.create clientId)
             <*> Validation.field OrderError.Store (StoreId.create storeId)
 

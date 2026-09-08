@@ -39,7 +39,8 @@ module StoreModel =
                   Name = name
                   Deliverymen = deliverymen }
 
-            build <!> Validation.field StoreError.Id (StoreId.create storeId)
+            build
+            <!> Validation.field StoreError.Id (StoreId.create storeId)
             <*> Validation.field StoreError.Name (ReqStr.create name)
             <*> Validation.field StoreError.Deliverymen (DeliverymanIds.create deliverymanIds)
 

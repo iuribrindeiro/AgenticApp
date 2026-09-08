@@ -73,7 +73,12 @@ module DomainLoader =
             watcher.Changed.Add reschedule
             watcher.Created.Add reschedule
             watcher.Renamed.Add reschedule
-            watcher.NotifyFilter <- NotifyFilters.LastWrite ||| NotifyFilters.FileName ||| NotifyFilters.Size
+
+            watcher.NotifyFilter <-
+                NotifyFilters.LastWrite
+                ||| NotifyFilters.FileName
+                ||| NotifyFilters.Size
+
             watcher.EnableRaisingEvents <- true
 
             { new IDisposable with

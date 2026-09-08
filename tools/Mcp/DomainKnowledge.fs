@@ -82,7 +82,8 @@ module DomainKnowledge =
 
     let private isDataType (t: Type) =
         not (isUnionCase t)
-        && (FSharpType.IsUnion(t, allMembers) || FSharpType.IsRecord(t, allMembers))
+        && (FSharpType.IsUnion(t, allMembers)
+            || FSharpType.IsRecord(t, allMembers))
 
     /// An unnamed DU field compiles to `Item`, `Item2`... Printing that documents the
     /// compiler rather than the domain.
@@ -168,7 +169,8 @@ module DomainKnowledge =
 
         sb.AppendLine().Append($"**%s{t.Name}**%s{kind}") |> ignore
 
-        sb.AppendLine(if summary = "" then "" else $". %s{summary}") |> ignore
+        sb.AppendLine(if summary = "" then "" else $". %s{summary}")
+        |> ignore
 
         if remarks <> "" then
             sb.AppendLine($"  %s{remarks}") |> ignore
@@ -195,7 +197,8 @@ module DomainKnowledge =
                     sb.AppendLine($"- `%s{c.Name}%s{shape}`") |> ignore
             elif FSharpType.IsRecord(t, allMembers) then
                 for f in FSharpType.GetRecordFields(t, allMembers) do
-                    sb.AppendLine($"- `%s{f.Name}: %s{typeName f.PropertyType}`") |> ignore
+                    sb.AppendLine($"- `%s{f.Name}: %s{typeName f.PropertyType}`")
+                    |> ignore
 
     let private appendFunction
         (sb: StringBuilder)
@@ -210,10 +213,14 @@ module DomainKnowledge =
             if ps.Length = 0 then
                 "unit"
             else
-                ps |> Array.map (fun p -> $"(%s{p.Name}: %s{paramType p})") |> String.concat " "
+                ps
+                |> Array.map (fun p -> $"(%s{p.Name}: %s{paramType p})")
+                |> String.concat " "
 
         sb.AppendLine().AppendLine($"### %s{name}") |> ignore
-        sb.AppendLine($"`%s{signature} → %s{typeName m.ReturnType}`") |> ignore
+
+        sb.AppendLine($"`%s{signature} → %s{typeName m.ReturnType}`")
+        |> ignore
 
         match doc with
         | Some d when d.Summary <> "" -> sb.AppendLine().AppendLine d.Summary |> ignore
@@ -251,7 +258,9 @@ module DomainKnowledge =
             |> Array.distinct
 
     let private label (topics: string array) =
-        topics |> Array.map (fun t -> $"\"%s{t}\"") |> String.concat ", "
+        topics
+        |> Array.map (fun t -> $"\"%s{t}\"")
+        |> String.concat ", "
 
     let private matchesAny (topics: string array) (text: string) =
         topics
@@ -266,7 +275,11 @@ module DomainKnowledge =
         assembly.GetTypes()
         |> Array.filter (fun t -> t.IsPublic || t.IsNestedPublic)
         |> Array.collect (fun t ->
-            t.GetMethods(BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.DeclaredOnly))
+            t.GetMethods(
+                BindingFlags.Public
+                ||| BindingFlags.Static
+                ||| BindingFlags.DeclaredOnly
+            ))
         |> Array.filter isExposable
         |> Array.sortBy toolName
 
@@ -324,9 +337,11 @@ module DomainKnowledge =
                 | Patterns.UnionCaseTest(_, case) when ours case.DeclaringType ->
                     tests.Add(case.DeclaringType, case.Name) |> ignore
                 | Patterns.NewUnionCase(case, _) when
-                    ours case.DeclaringType && case.DeclaringType.Name.EndsWith "Error"
+                    ours case.DeclaringType
+                    && case.DeclaringType.Name.EndsWith "Error"
                     ->
-                    errors.Add $"%s{case.DeclaringType.Name}.%s{case.Name}" |> ignore
+                    errors.Add $"%s{case.DeclaringType.Name}.%s{case.Name}"
+                    |> ignore
                 | _ -> ()
 
                 match e with
@@ -416,7 +431,10 @@ module DomainKnowledge =
                 )
             |> ignore
 
-            for source, group in all |> Array.filter (fun t -> summaryOf docs t <> "") |> Array.groupBy sourceOf do
+            for source, group in
+                all
+                |> Array.filter (fun t -> summaryOf docs t <> "")
+                |> Array.groupBy sourceOf do
                 sb.AppendLine().AppendLine($"## %s{source}.fs") |> ignore
 
                 for t in group do
@@ -436,7 +454,10 @@ module DomainKnowledge =
 
                     if direct then
                         Some(ty, true)
-                    elif matchesAny topics (summaryOf docs ty) || matchesAny topics (remarksOf docs ty) then
+                    elif
+                        matchesAny topics (summaryOf docs ty)
+                        || matchesAny topics (remarksOf docs ty)
+                    then
                         Some(ty, false)
                     else
                         None)
@@ -457,13 +478,14 @@ module DomainKnowledge =
             else
                 let isError (ty: Type) = ty.Name.EndsWith "Error"
 
-                for ty, direct in scored |> Array.filter (fun (ty, _) -> not (isError ty)) do
+                for ty, direct in scored |> Array.filter (fst >> isError >> not) do
                     appendType sb ty (summaryOf docs ty) (if direct then remarksOf docs ty else "")
 
-                match scored |> Array.filter (fun (ty, _) -> isError ty) with
+                match scored |> Array.filter (fst >> isError) with
                 | [||] -> ()
                 | errorTypes ->
-                    sb.AppendLine().AppendLine "### Errors these can return" |> ignore
+                    sb.AppendLine().AppendLine "### Errors these can return"
+                    |> ignore
 
                     for ty, direct in errorTypes do
                         appendErrorLine sb ty (if direct then summaryOf docs ty else "")
@@ -471,28 +493,33 @@ module DomainKnowledge =
                 let rejecting =
                     rejections assembly isExposable toolName
                     |> Array.collect (fun (fn, union, cases) ->
-                        cases |> Array.filter (matchesAny topics) |> Array.map (fun c -> fn, union, c))
+                        cases
+                        |> Array.filter (matchesAny topics)
+                        |> Array.map (fun c -> fn, union, c))
 
-                sb.AppendLine().AppendLine "## Rejections that name this" |> ignore
+                sb.AppendLine().AppendLine "## Rejections that name this"
+                |> ignore
 
                 if rejecting.Length = 0 then
-                    sb.AppendLine($"No error case is named for %s{label topics}.") |> ignore
+                    sb.AppendLine($"No error case is named for %s{label topics}.")
+                    |> ignore
                 else
                     for fn, union, case in rejecting do
-                        sb.AppendLine($"- `%s{fn}` rejects with `%s{union}.%s{case}`") |> ignore
+                        sb.AppendLine($"- `%s{fn}` rejects with `%s{union}.%s{case}`")
+                        |> ignore
 
                 // What actually branches on the matched types, read from the compiled
                 // quotations rather than from names or doc comments. This is what makes an
                 // absence provable: if no function tests a case, nothing gates on it.
                 let analysed = behaviour assembly isExposable toolName
-                let complete = analysed |> Array.forall (fun (_, b) -> Option.isSome b)
+                let complete = analysed |> Array.forall (snd >> Option.isSome)
 
                 // Only states, never error unions. A `describe` function pattern-matching its
                 // own error union is noise, and error cases dragged in by a substring match on
                 // the topics brought a dozen such lines with them.
                 let branching =
                     matching
-                    |> Array.filter (fun ty -> not (ty.Name.EndsWith "Error"))
+                    |> Array.filter (isError >> not)
                     |> Array.collect (fun ty ->
                         analysed
                         |> Array.choose (fun (fn, b) ->
@@ -514,21 +541,28 @@ module DomainKnowledge =
                     sb.AppendLine().AppendLine "## What branches on this" |> ignore
 
                 for owner, fn, cases, errors in branching |> Array.sortBy (fun (o, f, _, _) -> o, f) do
-                    let tested = cases |> List.map (fun c -> $"`%s{owner}.%s{c}`") |> String.concat ", "
+                    let tested =
+                        cases
+                        |> List.map (fun c -> $"`%s{owner}.%s{c}`")
+                        |> String.concat ", "
 
                     let mayReturn =
                         if errors.IsEmpty then
                             "cannot fail"
                         else
                             "may return "
-                            + (errors |> List.sort |> List.map (fun e -> $"`%s{e}`") |> String.concat ", ")
+                            + (errors
+                               |> List.sort
+                               |> List.map (fun e -> $"`%s{e}`")
+                               |> String.concat ", ")
 
-                    sb.AppendLine($"- `%s{fn}` tests %s{tested} — %s{mayReturn}") |> ignore
+                    sb.AppendLine($"- `%s{fn}` tests %s{tested} — %s{mayReturn}")
+                    |> ignore
 
                 if complete then
                     let names =
                         matching
-                        |> Array.filter (fun ty -> not (ty.Name.EndsWith "Error"))
+                        |> Array.filter (isError >> not)
                         |> Array.map _.Name
                         |> Array.distinct
                         |> String.concat ", "

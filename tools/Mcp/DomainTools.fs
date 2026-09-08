@@ -238,14 +238,21 @@ module DomainTools =
         @ (assembly.GetTypes()
            |> Seq.filter (fun t -> t.IsPublic || t.IsNestedPublic)
            |> Seq.collect (fun t ->
-               t.GetMethods(BindingFlags.Public ||| BindingFlags.Static ||| BindingFlags.DeclaredOnly))
+               t.GetMethods(
+                   BindingFlags.Public
+                   ||| BindingFlags.Static
+                   ||| BindingFlags.DeclaredOnly
+               ))
            |> Seq.filter isExposable
            |> Seq.map (fun m ->
                let createOpts =
                    McpServerToolCreateOptions(
                        Name = toolName m,
                        Title = toolName m,
-                       Description = (DomainDocs.docFor docs m |> Option.map _.Summary |> Option.defaultValue ""),
+                       Description =
+                           (DomainDocs.docFor docs m
+                            |> Option.map _.Summary
+                            |> Option.defaultValue ""),
                        ReadOnly = true,
                        OpenWorld = false,
                        SerializerOptions = opts,

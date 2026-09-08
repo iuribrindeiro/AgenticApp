@@ -119,7 +119,9 @@ module DeliverymanModel =
                 if not missing.IsEmpty then
                     Error missing
                 else
-                    indexed |> List.choose (fun (_, m) -> Option.ofObj m) |> StoreMemberships.OfList
+                    indexed
+                    |> List.choose (snd >> Option.ofObj)
+                    |> StoreMemberships.OfList
 
             static member Explain(errors) =
                 errors
@@ -157,7 +159,8 @@ module DeliverymanModel =
         /// <param name="store">The store to look for.</param>
         /// <param name="storeMemberships">The set to search.</param>
         let tryFind store storeMemberships =
-            value storeMemberships |> List.tryFind (fun m -> Membership.storeId m = store)
+            value storeMemberships
+            |> List.tryFind (fun m -> Membership.storeId m = store)
 
         /// <summary>The store he is currently online at, or None when he is offline everywhere.</summary>
         /// <param name="storeMemberships">The set to search.</param>
@@ -328,9 +331,13 @@ module DeliverymanModel =
                  | ids -> List.ofArray ids)
                 |> List.indexed
                 |> Validation.traverse (fun (i, raw) ->
-                    StoreId.create raw |> Validation.field (fun e -> DeliverymanError.StoreAt(i, e)))
+                    StoreId.create raw
+                    |> Validation.field (fun e -> DeliverymanError.StoreAt(i, e)))
                 |> Result.map (List.map Membership.Invited)
-                |> Result.bind (fun ms -> StoreMemberships.OfList ms |> Validation.field DeliverymanError.Stores)
+                |> Result.bind (
+                    StoreMemberships.OfList
+                    >> Validation.field DeliverymanError.Stores
+                )
 
             let build i n s = { Id = i; Name = n; Stores = s }
 
@@ -355,7 +362,8 @@ module DeliverymanModel =
         /// <summary>The id of the store he is currently online at, or None when he is offline everywhere.</summary>
         /// <param name="deliveryman">The deliveryman to read.</param>
         let onlineStore deliveryman =
-            StoreMemberships.onlineStore deliveryman.Stores |> Option.map StoreId.value
+            StoreMemberships.onlineStore deliveryman.Stores
+            |> Option.map StoreId.value
 
         /// <summary>Invites him to a store. A store he declined or was removed from can be invited again; one he is already invited to or working at cannot.</summary>
         /// <param name="store">The store to invite him to.</param>

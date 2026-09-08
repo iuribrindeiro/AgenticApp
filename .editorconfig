@@ -13,6 +13,12 @@ indent_size = 2
 
 [*.{fs,fsi,fsx}]
 indent_size = 4
+# Fantomas glues the head of an infix chain onto the first operator while that
+# segment fits in this width, so `build <!> Validation.field ...` ends up on one
+# line and only the later `<*>` get their own. Below 65 the head breaks out, and
+# an applicative chain reads `build` / `<!> ...` / `<*> ...` throughout. There is
+# no per-operator setting: this also splits `|>` pipelines sooner.
+fsharp_max_infix_operator_expression = 64
 
 [*.cs]
 # Namespaces / usings

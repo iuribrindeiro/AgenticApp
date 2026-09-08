@@ -114,7 +114,11 @@ module ValueObjectJson =
         elif t.IsGenericType then
             let d = t.GetGenericTypeDefinition()
 
-            if d = typedefof<_ list> || d = typedefof<_ option> || d = typedefof<seq<_>> then
+            if
+                d = typedefof<_ list>
+                || d = typedefof<_ option>
+                || d = typedefof<seq<_>>
+            then
                 Some(t.GetGenericArguments().[0])
             else
                 None
@@ -125,14 +129,19 @@ module ValueObjectJson =
     let containerElementOf (t: Type) = elementOf t
 
     let isUnion (t: Type) =
-        FSharpType.IsUnion(t, flags) && not (isValueObject t) && (elementOf t).IsNone
+        FSharpType.IsUnion(t, flags)
+        && not (isValueObject t)
+        && (elementOf t).IsNone
 
     /// Can a deserializer produce a value of this type that the domain would have
     /// rejected? Value objects validate in `Make`; a record of safe fields has no
     /// illegal combination; a union's every case is legal by construction.
     let isForgeable (t: Type) =
         let rec go (seen: Set<string>) (t: Type) =
-            let key = t.AssemblyQualifiedName |> Option.ofObj |> Option.defaultValue t.Name
+            let key =
+                t.AssemblyQualifiedName
+                |> Option.ofObj
+                |> Option.defaultValue t.Name
 
             if seen.Contains key then
                 false
@@ -146,7 +155,7 @@ module ValueObjectJson =
                     | Some e -> go seen e
                     | None ->
                         if isRecord t then
-                            recordFields t |> Array.exists (fun f -> go seen f.PropertyType)
+                            recordFields t |> Array.exists (_.PropertyType >> go seen)
                         elif isUnion t then
                             false
                         else
@@ -159,7 +168,10 @@ module ValueObjectJson =
     /// for them - each shape needs a transform in DomainTools before it is usable.
     let isSchematisable (t: Type) =
         let rec go (seen: Set<string>) (t: Type) =
-            let key = t.AssemblyQualifiedName |> Option.ofObj |> Option.defaultValue t.Name
+            let key =
+                t.AssemblyQualifiedName
+                |> Option.ofObj
+                |> Option.defaultValue t.Name
 
             if seen.Contains key then
                 true
@@ -173,10 +185,10 @@ module ValueObjectJson =
                     | Some e -> go seen e
                     | None ->
                         if isRecord t then
-                            recordFields t |> Array.forall (fun f -> go seen f.PropertyType)
+                            recordFields t |> Array.forall (_.PropertyType >> go seen)
                         elif isUnion t then
                             FSharpType.GetUnionCases(t, flags)
-                            |> Array.forall (fun c -> c.GetFields() |> Array.forall (fun f -> go seen f.PropertyType))
+                            |> Array.forall (_.GetFields() >> Array.forall (_.PropertyType >> go seen))
                         else
                             false
 
@@ -209,7 +221,10 @@ type ValueObjectConverter<'T>(make: MethodInfo, explain: MethodInfo option, wire
         | result ->
             let rt = result.GetType()
 
-            if rt.IsGenericType && rt.GetGenericTypeDefinition() = typedefof<Result<_, _>> then
+            if
+                rt.IsGenericType
+                && rt.GetGenericTypeDefinition() = typedefof<Result<_, _>>
+            then
                 match ValueObjectJson.tagOf rt result with
                 | 0 ->
                     match ValueObjectJson.fieldOf rt result "ResultValue" with

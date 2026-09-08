@@ -148,7 +148,10 @@ module Ids =
                     let raws = ok |> List.map DeliverymanId.value
 
                     let duplicates =
-                        raws |> List.countBy id |> List.filter (fun (_, n) -> n > 1) |> List.map fst
+                        raws
+                        |> List.countBy id
+                        |> List.filter (fun (_, n) -> n > 1)
+                        |> List.map fst
 
                     if duplicates.IsEmpty then
                         Ok(DeliverymanIds ok)
@@ -183,7 +186,9 @@ module Ids =
         /// <summary>Unwraps the set as plain numbers, for the wire or for persistence.</summary>
         /// <param name="deliverymanIds">The validated set.</param>
         let toArray deliverymanIds =
-            value deliverymanIds |> List.map DeliverymanId.value |> Array.ofList
+            value deliverymanIds
+            |> List.map DeliverymanId.value
+            |> Array.ofList
 
         /// <summary>Whether the set already holds this deliveryman.</summary>
         /// <param name="deliverymanId">The deliveryman to look for.</param>
@@ -205,7 +210,12 @@ module Ids =
         /// <param name="deliverymanIds">The set to remove from.</param>
         let tryRemove deliverymanId deliverymanIds =
             if contains deliverymanId deliverymanIds then
-                Some(DeliverymanIds(value deliverymanIds |> List.filter (fun x -> x <> deliverymanId)))
+                Some(
+                    DeliverymanIds(
+                        value deliverymanIds
+                        |> List.filter (fun x -> x <> deliverymanId)
+                    )
+                )
             else
                 None
 

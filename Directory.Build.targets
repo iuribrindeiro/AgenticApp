@@ -87,6 +87,39 @@
     <Touch Files="$(IntermediateOutputPath)fantomas.stamp" AlwaysCreate="true" />
   </Target>
 
+  <!--
+    The composition rule in CLAUDE.md, enforced where a linter can see it. FSharpLint's
+    FL0034 (ReimplementsFunction) catches `fun x -> f x`, and FL0035
+    (CanBeReplacedWithComposition) catches `fun x -> x |> f |> g`, though only for chains
+    of three or more functions - its threshold is a literal in the rule and not
+    configurable, so two-function chains stay a review concern.
+
+    fsharplint.json enables exactly these two: its default of 42 rules brings naming and
+    layout opinions that Fantomas and review already own. Wildcard rather than project
+    mode, so the linter does not re-evaluate the project MSBuild is mid-build on.
+    Set VerifyLint=false to skip.
+  -->
+  <Target Name="LintFSharp"
+          AfterTargets="Build"
+          Inputs="@(Compile)"
+          Outputs="$(IntermediateOutputPath)fsharplint.stamp"
+          Condition="'$(VerifyLint)' != 'false' And '@(Compile)' != '' And '$(MSBuildProjectExtension)' == '.fsproj'">
+    <!-- IgnoreStandardErrorWarningFormat: the linter prints "Wildcard detected, but not
+         recommended" on every run, and MSBuild would surface that as a build warning. -->
+    <Exec Command="dotnet fsharplint lint --lint-config &quot;$(MSBuildThisFileDirectory)fsharplint.json&quot; --file-type wildcard &quot;$(MSBuildProjectDirectory)/*.fs&quot;"
+          WorkingDirectory="$(MSBuildThisFileDirectory)"
+          ContinueOnError="true"
+          IgnoreStandardErrorWarningFormat="true"
+          StandardOutputImportance="low">
+      <Output TaskParameter="ExitCode" PropertyName="FSharpLintExit" />
+    </Exec>
+    <!-- Any non-zero is a failure: findings exit 255, and a file the linter could not
+         process is unlinted rather than clean. Re-run without the redirect to read them. -->
+    <Error Condition="'$(FSharpLintExit)' != '0'"
+           Text="F# lint findings in $(MSBuildProjectName). Run: dotnet fsharplint lint --lint-config fsharplint.json --file-type wildcard &quot;$(MSBuildProjectDirectory)/*.fs&quot;" />
+    <Touch Files="$(IntermediateOutputPath)fsharplint.stamp" AlwaysCreate="true" />
+  </Target>
+
   <Target Name="VerifyCSharpFormat"
           AfterTargets="Build"
           Inputs="@(Compile)"
